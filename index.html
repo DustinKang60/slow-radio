@@ -21,6 +21,16 @@ header{padding:13px 20px;border-bottom:1px solid var(--border);display:flex;alig
 #search{margin-left:auto;background:var(--surface);border:1px solid var(--border);color:var(--text);
 border-radius:20px;padding:9px 16px;width:min(320px,42vw);font-size:13px;outline:none}
 #search:focus{border-color:var(--accent)}
+/* 취침 타이머 */
+#timerSel{margin-left:9px;background:var(--surface);border:1px solid var(--border);color:var(--sub);
+border-radius:20px;padding:8px 10px;font-size:12px;font-family:inherit;cursor:pointer;outline:none}
+#timerSel.on{color:var(--accent2);border-color:var(--accent)}
+#timerLeft{margin-left:8px;font-size:12.5px;color:var(--accent2);font-variant-numeric:tabular-nums}
+.over{position:fixed;inset:0;z-index:99;background:rgba(10,11,16,.96);display:flex;flex-direction:column;
+align-items:center;justify-content:center;gap:15px;text-align:center;padding:24px}
+.over h2{font-size:21px}
+.over p{font-size:13px;color:var(--sub);line-height:1.7}
+.over .row{display:flex;gap:8px}
 .main{flex:1;display:flex;min-height:0}
 .side{width:210px;border-right:1px solid var(--border);overflow-y:auto;padding:8px;flex-shrink:0}
 .tab{display:flex;gap:4px;padding:4px 6px 8px}
@@ -50,11 +60,37 @@ display:flex;align-items:center;gap:13px;padding:9px 16px;min-height:60px}
 .now .m{font-size:12px;color:var(--sub)}.now .idle{color:var(--muted)}
 .next{background:var(--card);border:1px solid var(--border);color:var(--sub);border-radius:16px;
 padding:7px 13px;font-size:12px;cursor:pointer;white-space:nowrap}.next:hover{color:var(--text);border-color:var(--accent)}
+/* 정렬·필터 툴바 */
+.toolbar{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:0 0 13px}
+.toolbar select,.chip{background:var(--surface);border:1px solid var(--border);color:var(--sub);
+border-radius:7px;padding:5px 11px;font-size:12px;cursor:pointer;font-family:inherit;outline:none}
+.chip:hover,.toolbar select:hover{color:var(--text)}
+.chip.on{background:var(--card);color:var(--text);border-color:var(--accent)}
+.stat{font-size:12px;color:var(--muted);padding:0 4px}
+/* 시청 표시 */
+.item.seen{opacity:.5}
+.item.seen .play{background:var(--muted)}
+.item.seen.playing{opacity:1}
+/* 나중에 보기 별 */
+.item>div:nth-child(2){min-width:0}
+.star{margin-left:auto;flex-shrink:0;background:none;border:0;color:var(--muted);
+font-size:17px;line-height:1;padding:4px 5px;cursor:pointer}
+.star:hover{color:var(--text)}
+.star.on{color:var(--accent2)}
+.tab button.later{flex:0 0 auto;padding:6px 9px}
+.empty{color:var(--muted);font-size:13px;padding:22px 2px;line-height:1.6}
 @media(max-width:640px){#ytframe{width:110px;height:62px}.side{width:150px}}
 </style></head><body>
 <header>
   <div class="logo"><span class="a">지구본</span> 라디오</div><span class="brand">작은앱공방</span>
   <input id="search" placeholder="제목 검색 → 재생…">
+  <select id="timerSel" title="타이머 — 시간이 되면 재생을 멈추고 앱을 닫습니다">
+    <option value="0">⏱ 타이머</option>
+    <option value="30">30분 뒤 종료</option>
+    <option value="60">1시간 뒤 종료</option>
+    <option value="120">2시간 뒤 종료</option>
+  </select>
+  <span id="timerLeft"></span>
 </header>
 <div class="main">
   <div class="side" id="side"></div>
@@ -71,6 +107,20 @@ const DATA = [{"b": "국가", "l": "미국", "d": "초기 01", "s": "0000001", "
 const BUCKETS=["국가","지역","주제","기타"];
 let curBucket="국가",curLabel=null,curSearch="",queue=[],qidx=-1;
 let player,ytReady=false,pending=null;
+
+/* ── 로컬 저장: 본 편 / 나중에 보기 / 정렬·필터 ─────────────────────── */
+const LS={seen:"gr_seen",later:"gr_later",sort:"gr_sort",hide:"gr_hide"};
+function loadSet(k){try{return new Set(JSON.parse(localStorage.getItem(k)||"[]"));}catch(e){return new Set();}}
+function saveSet(k,s){try{localStorage.setItem(k,JSON.stringify([...s]));}catch(e){}}
+const seen=loadSet(LS.seen),later=loadSet(LS.later);
+let sortDesc=localStorage.getItem(LS.sort)!=="asc";   // 기본 최신순
+let hideSeen=localStorage.getItem(LS.hide)==="1";
+let view="normal";                                    // normal | later
+let curKey=null;                                      // 지금 재생 중인 편의 키
+// s(날짜키)는 같은 날 업로드끼리 겹치므로 영상ID를 우선 키로 쓴다.
+function keyOf(d){return d.y||(d.s+"|"+d.t);}
+function sortList(list){return list.slice().sort((a,c)=>{
+  const r=a.s<c.s?-1:a.s>c.s?1:0;return sortDesc?-r:r;});}
 const A=document.getElementById('localAudio');
 A.onended=()=>playNext();
 
@@ -87,33 +137,96 @@ function buildSide(){
   const m=counts(),side=document.getElementById("side");side.innerHTML="";
   const tab=document.createElement("div");tab.className="tab";
   BUCKETS.forEach(b=>{const n=DATA.filter(d=>d.b===b).length;if(!n)return;
-    const btn=document.createElement("button");btn.textContent=b;if(b===curBucket)btn.className="on";
-    btn.onclick=()=>{curBucket=b;curLabel=null;curSearch="";document.getElementById("search").value="";render();};tab.appendChild(btn);});
+    const btn=document.createElement("button");btn.textContent=b;if(b===curBucket&&view==="normal")btn.className="on";
+    btn.onclick=()=>{view="normal";curBucket=b;curLabel=null;curSearch="";document.getElementById("search").value="";render();};tab.appendChild(btn);});
+  const lb=document.createElement("button");lb.className="later"+(view==="later"?" on":"");
+  lb.textContent="★";lb.title="나중에 보기";
+  lb.onclick=()=>{view=view==="later"?"normal":"later";curSearch="";document.getElementById("search").value="";render();};
+  tab.appendChild(lb);
   side.appendChild(tab);
   const labs=[...new Set(DATA.filter(d=>d.b===curBucket).map(d=>d.l))];
   labs.sort((a,c)=>(m[curBucket+"|"+c]||0)-(m[curBucket+"|"+a]||0));
-  labs.forEach(l=>{const el=document.createElement("div");el.className="lab"+(l===curLabel&&!curSearch?" on":"");
-    el.innerHTML=`<span>${l}</span><span class="c">${m[curBucket+"|"+l]}</span>`;
-    el.onclick=()=>{curLabel=l;curSearch="";document.getElementById("search").value="";render();};side.appendChild(el);});
+  labs.forEach(l=>{const el=document.createElement("div");el.className="lab"+(l===curLabel&&!curSearch&&view==="normal"?" on":"");
+    el.innerHTML=`<span>${esc(l)}</span><span class="c">${m[curBucket+"|"+l]}</span>`;
+    el.onclick=()=>{view="normal";curLabel=l;curSearch="";document.getElementById("search").value="";render();};side.appendChild(el);});
 }
 function render(){
-  buildSide();const c=document.getElementById("content");let list;
-  if(curSearch){const q=curSearch.toLowerCase();
+  buildSide();const c=document.getElementById("content");let list,head,sub;
+  if(view==="later"){
+    list=DATA.filter(d=>later.has(keyOf(d)));
+    head="★ 나중에 보기";sub=list.length+"편 저장됨";
+  }else if(curSearch){const q=curSearch.toLowerCase();
     list=DATA.filter(d=>d.t.toLowerCase().includes(q));
-    c.innerHTML=`<div class="h">검색: "${esc(curSearch)}"</div><div class="hs">${list.length}편 — 누르면 재생</div>`;
+    head=`검색: "${esc(curSearch)}"`;sub=list.length+"편 — 누르면 재생";
   }else{const labs=[...new Set(DATA.filter(d=>d.b===curBucket).map(d=>d.l))];
     if(!curLabel||!labs.includes(curLabel))curLabel=labs[0];
     list=DATA.filter(d=>d.b===curBucket&&d.l===curLabel);
-    c.innerHTML=`<div class="h">${esc(curLabel)}</div><div class="hs">${list.length}편 · 시간순 · 누르면 재생</div>`;}
+    head=esc(curLabel);sub=list.length+"편 · 누르면 재생";}
+  list=sortList(list);
+  const total=list.length;
+  if(hideSeen)list=list.filter(d=>!seen.has(keyOf(d)));
+  c.innerHTML=`<div class="h">${head}</div><div class="hs">${sub}${hideSeen&&total!==list.length?` · 본 편 ${total-list.length}개 숨김`:""}</div>
+    <div class="toolbar">
+      <select id="sortSel"><option value="desc">최신순</option><option value="asc">오래된순</option></select>
+      <button class="chip${hideSeen?" on":""}" id="hideBtn">안 본 편만</button>
+      <span class="stat">✓ 본 편 ${seen.size}</span>
+      <button class="chip" id="backupBtn" title="본 기록·나중에 보기를 파일로 저장">백업</button>
+      <button class="chip" id="restoreBtn" title="백업 파일을 합쳐서 불러오기 (기존 기록은 유지)">복원</button>
+      ${view==="later"&&later.size?'<button class="chip" id="clrLater">목록 비우기</button>':""}
+    </div>`;
+  const sel=c.querySelector("#sortSel");sel.value=sortDesc?"desc":"asc";
+  sel.onchange=e=>{sortDesc=e.target.value==="desc";localStorage.setItem(LS.sort,sortDesc?"desc":"asc");render();};
+  c.querySelector("#hideBtn").onclick=()=>{hideSeen=!hideSeen;localStorage.setItem(LS.hide,hideSeen?"1":"0");render();};
+  c.querySelector("#backupBtn").onclick=backup;
+  c.querySelector("#restoreBtn").onclick=restore;
+  const cl=c.querySelector("#clrLater");
+  if(cl)cl.onclick=()=>{if(confirm("나중에 보기 목록을 비울까요?")){later.clear();saveSet(LS.later,later);render();}};
+  if(!list.length){const e=document.createElement("div");e.className="empty";
+    e.textContent=view==="later"?"저장된 편이 없습니다. 목록에서 ☆ 를 눌러 담아두세요."
+      :hideSeen&&total?"이 목록은 전부 들으셨습니다. ‘안 본 편만’을 끄면 다시 보입니다.":"표시할 편이 없습니다.";
+    c.appendChild(e);return;}
   const frag=document.createDocumentFragment();
-  list.forEach((d,i)=>{const el=document.createElement("div");el.className="item"+(d.k==="audio"?" audio":"");
-    el.innerHTML=`<div class="play">▶</div><div><div class="d">${d.d||"날짜미상"}</div>
-      <div class="t">${esc(d.t)}</div><div class="tag">${d.b} · ${d.l}${d.k==="audio"?(d.p?" · 초기 오디오":" · 초기 오디오 (PC 전용)"):""}</div></div>`;
-    el.onclick=()=>playItem(d,list,i,el);frag.appendChild(el);});
+  list.forEach((d,i)=>{const k=keyOf(d),isSeen=seen.has(k),isLater=later.has(k);
+    const el=document.createElement("div");
+    el.className="item"+(d.k==="audio"?" audio":"")+(isSeen?" seen":"")+(k===curKey?" playing":"");
+    el.dataset.k=k;
+    el.innerHTML=`<div class="play">${isSeen?"✓":"▶"}</div><div><div class="d">${esc(d.d||"날짜미상")}</div>
+      <div class="t">${esc(d.t)}</div><div class="tag">${esc(d.b)} · ${esc(d.l)}${d.k==="audio"?(d.p?" · 초기 오디오":" · 초기 오디오 (PC 전용)"):""}</div></div>
+      <button class="star${isLater?" on":""}" title="나중에 보기">${isLater?"★":"☆"}</button>`;
+    el.onclick=()=>playItem(d,list,i,el);
+    el.querySelector(".star").onclick=ev=>{ev.stopPropagation();toggleLater(d,ev.currentTarget);};
+    frag.appendChild(el);});
   c.appendChild(frag);
 }
+/* 본 기록은 지우는 기능을 두지 않는다. 백업은 파일로, 복원은 합치기만 한다(삭제 없음). */
+function backup(){
+  const blob=new Blob([JSON.stringify({v:1,at:new Date().toISOString(),seen:[...seen],later:[...later]},null,1)],
+    {type:"application/json"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);
+  a.download="지구본라디오-기록-"+new Date().toISOString().slice(0,10)+".json";
+  a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+function restore(){
+  const inp=document.createElement("input");inp.type="file";inp.accept="application/json,.json";
+  inp.onchange=()=>{const f=inp.files[0];if(!f)return;const rd=new FileReader();
+    rd.onload=()=>{try{const o=JSON.parse(rd.result);const before=seen.size;
+      (o.seen||[]).forEach(k=>seen.add(k));(o.later||[]).forEach(k=>later.add(k));
+      saveSet(LS.seen,seen);saveSet(LS.later,later);render();
+      alert("복원 완료 — 본 편 "+(seen.size-before)+"개 추가 (기존 기록은 그대로)");
+    }catch(e){alert("파일을 읽을 수 없습니다");}};
+    rd.readAsText(f);};
+  inp.click();
+}
+function toggleLater(d,btn){const k=keyOf(d);
+  if(later.has(k))later.delete(k);else later.add(k);
+  saveSet(LS.later,later);
+  if(view==="later"){render();return;}
+  const on=later.has(k);btn.className="star"+(on?" on":"");btn.textContent=on?"★":"☆";
+}
 function playItem(d,list,idx,el){
-  queue=list;qidx=idx;
+  queue=list;qidx=idx;curKey=keyOf(d);
+  if(!seen.has(curKey)){seen.add(curKey);saveSet(LS.seen,seen);
+    if(el){el.classList.add("seen");el.querySelector(".play").textContent="✓";}}
   document.querySelectorAll(".item.playing").forEach(e=>e.classList.remove("playing"));
   if(el)el.classList.add("playing");
   document.getElementById("nowT").className="t";
@@ -124,11 +237,56 @@ function playItem(d,list,idx,el){
     document.getElementById("nowM").textContent="로컬 오디오 재생 실패 — PC 로컬 서버로 열어야 합니다";});}
   else{document.getElementById("nowM").textContent="초기 오디오(mp3)는 PC판에서만 재생됩니다";}
 }
-function playNext(){if(qidx>=0&&qidx+1<queue.length){const items=document.querySelectorAll(".item");
-  playItem(queue[qidx+1],queue,qidx+1,items[qidx+1]);if(items[qidx])items[qidx].scrollIntoView({block:"nearest"});}}
+// 큐와 화면 목록이 다를 수 있으므로 인덱스가 아니라 키로 엘리먼트를 찾는다.
+function playNext(){
+  if(qidx<0||qidx+1>=queue.length){document.getElementById("nowM").textContent="마지막 편입니다";return;}
+  const d=queue[qidx+1],k=keyOf(d);
+  const el=[...document.querySelectorAll(".item")].find(e=>e.dataset.k===k)||null;
+  playItem(d,queue,qidx+1,el);
+  if(el)el.scrollIntoView({block:"nearest"});
+}
+/* ── 취침 타이머: 시간이 되면 재생을 멈추고 앱을 닫는다 ─────────────── */
+let timerEnd=0,timerTick=null,timerAlarm=null;
+function fmtLeft(ms){const s=Math.max(0,Math.round(ms/1000)),p=n=>String(n).padStart(2,"0");
+  return p(Math.floor(s/3600))+":"+p(Math.floor(s%3600/60))+":"+p(s%60);}
+function setTimer(min){
+  clearInterval(timerTick);clearTimeout(timerAlarm);timerTick=timerAlarm=null;
+  const sel=document.getElementById("timerSel"),lab=document.getElementById("timerLeft");
+  if(!min){timerEnd=0;sel.className="";sel.value="0";lab.textContent="";return;}
+  timerEnd=Date.now()+min*60000;sel.className="on";
+  const tick=()=>{const left=timerEnd-Date.now();
+    if(left<=0){setTimer(0);shutdown();return;}
+    lab.textContent=fmtLeft(left);};
+  tick();
+  timerTick=setInterval(tick,1000);
+  // 백그라운드 탭에서는 interval이 느려지므로 정확한 시각에 한 번 더 깨운다.
+  timerAlarm=setTimeout(tick,min*60000+300);
+}
+function shutdown(){
+  try{A.pause();A.removeAttribute("src");}catch(e){}
+  try{if(ytReady&&player&&player.stopVideo)player.stopVideo();}catch(e){}
+  pending=null;queue=[];qidx=-1;
+  document.getElementById("nowT").className="t idle";
+  document.getElementById("nowT").textContent="타이머 종료 — 재생을 멈췄습니다";
+  document.getElementById("nowM").textContent="";
+  if(document.querySelector(".over"))return;
+  const o=document.createElement("div");o.className="over";
+  o.innerHTML=`<h2>⏱ 타이머 종료</h2>
+    <p>재생을 멈췄습니다. 잠시 후 창을 닫습니다.<br>자동으로 닫히지 않으면 직접 닫아주세요.</p>
+    <div class="row"><button class="chip" id="ovClose">지금 닫기</button><button class="chip" id="ovStay">계속 듣기</button></div>`;
+  document.body.appendChild(o);
+  o.querySelector("#ovClose").onclick=closeApp;
+  o.querySelector("#ovStay").onclick=()=>o.remove();
+  setTimeout(closeApp,2000);
+}
+// 스크립트가 연 창이 아니면 close()가 막힌다. 그때는 안내 화면이 그대로 남는다.
+function closeApp(){try{window.close();}catch(e){}}
+document.getElementById("timerSel").onchange=e=>setTimer(+e.target.value);
 document.getElementById("nextBtn").onclick=playNext;
-let tm;document.getElementById("search").oninput=e=>{clearTimeout(tm);tm=setTimeout(()=>{curSearch=e.target.value.trim();render();},180);};
+let tm;document.getElementById("search").oninput=e=>{clearTimeout(tm);tm=setTimeout(()=>{curSearch=e.target.value.trim();if(curSearch)view="normal";render();},180);};
 render();
+// 브라우저가 저장소를 임의로 비우지 못하게 요청 (본 기록 보호)
+if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(()=>{});
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   navigator.serviceWorker.register('sw.js').catch(()=>{});
 }
