@@ -1,6 +1,9 @@
 <!doctype html>
 <html lang="ko"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- viewport-fit=cover 금지: 설치형(standalone)에서 화면을 시스템 내비게이션 바
+     아래까지 넓혀버려, 3버튼 내비 기기에서 하단 재생바가 내비 뒤로 숨는다.
+     (safe-area-inset-bottom 이 0 으로 보고되는 기기가 많아 보정도 안 먹는다) -->
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>지구본 라디오 · 작은앱공방</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0a0b10">
