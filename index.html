@@ -83,10 +83,11 @@ font-size:17px;line-height:1;padding:4px 5px;cursor:pointer}
 /* 헤더 한 줄 유지: 로고는 줄바꿈 금지, 브랜드 배지는 숨김 */
 body{height:100dvh}
 header{padding:10px 13px;gap:8px;padding-top:calc(10px + env(safe-area-inset-top))}
-.logo{font-size:17px;white-space:nowrap}
+/* 로고는 절대 줄바꿈·축소하지 않는다. 폭이 모자라면 검색창이 먼저 줄어든다. */
+.logo{font-size:16.5px;white-space:nowrap;flex-shrink:0}
 .brand{display:none}
-#search{margin-left:auto;flex:1;min-width:0;width:auto;padding:8px 13px;font-size:12.5px}
-#timerSel{margin-left:0;padding:7px 5px;font-size:11px;flex-shrink:0}
+#search{margin-left:auto;flex:1 1 0;min-width:52px;width:auto;padding:7px 10px;font-size:12px}
+#timerSel{margin-left:0;padding:6px 3px;font-size:10.5px;flex-shrink:0;width:84px;text-overflow:ellipsis}
 #timerLeft{margin-left:5px;font-size:11px}
 /* 사이드바를 좁혀 목록 폭을 확보 */
 .side{width:130px;padding:6px 4px}
