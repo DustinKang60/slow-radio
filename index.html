@@ -119,7 +119,10 @@ font-size:17px;line-height:1;padding:4px 5px;cursor:pointer}
 /* ── 모바일 전용 (데스크톱 레이아웃은 위 규칙 그대로) ───────────────── */
 @media(max-width:640px){
 /* 헤더 한 줄 유지: 로고는 줄바꿈 금지, 브랜드 배지는 숨김 */
-body{height:100dvh}
+/* height 를 주면 안 된다. body 는 position:fixed;inset:0 으로 뷰포트에 맞춰져
+   있는데, 고정 요소는 높이가 명시되면 그 값이 아래쪽 위치보다 우선한다.
+   dvh 가 실제 보이는 높이보다 크게 잡히는 순간 하단 재생바가 화면 밖으로
+   밀려나 사라진다. (그래서 예전 100dvh 규칙을 지운다) */
 header{padding:10px 13px;gap:8px;padding-top:calc(10px + env(safe-area-inset-top))}
 /* 로고는 절대 줄바꿈·축소하지 않는다. 폭이 모자라면 검색창이 먼저 줄어든다. */
 .logo{font-size:16.5px;white-space:nowrap;flex-shrink:0}
@@ -266,6 +269,23 @@ const LS={seen:"gr_seen",later:"gr_later",sort:"gr_sort",hide:"gr_hide",pos:"gr_
 function loadSet(k){try{return new Set(JSON.parse(localStorage.getItem(k)||"[]"));}catch(e){return new Set();}}
 function saveSet(k,s){try{localStorage.setItem(k,JSON.stringify([...s]));}catch(e){}}
 const seen=loadSet(LS.seen),later=loadSet(LS.later);
+
+/* ── 새로 올라온 편 표시 ────────────────────────────────────────────────
+   "지난번에 앱을 열었을 때 목록에 없던 편"을 새 편으로 본다. 그래야 앱이
+   직접 찾아낸 것이든, 매일 도는 자동 갱신이 카탈로그에 넣어준 것이든
+   똑같이 표시된다. 본 적 있는 편은 제외한다. */
+const LS_KNOWN="gr_known";
+let freshIds=new Set();
+function refreshNew(){
+  const known=loadSet(LS_KNOWN);
+  const ids=DATA.filter(d=>d.y).map(d=>d.y);
+  if(!known.size){                    // 첫 실행: 전부 아는 것으로 두고 시작
+    ids.forEach(i=>known.add(i));saveSet(LS_KNOWN,known);return;
+  }
+  ids.forEach(i=>{if(!known.has(i))freshIds.add(i);known.add(i);});
+  saveSet(LS_KNOWN,known);
+}
+function isNew(d){return !!(d.y&&freshIds.has(d.y)&&!seen.has(keyOf(d)));}
 let sortDesc=localStorage.getItem(LS.sort)!=="asc";   // 기본 최신순
 let hideSeen=localStorage.getItem(LS.hide)==="1";
 let view="normal";                                    // normal | later
@@ -310,7 +330,7 @@ function buildSide(){
   labs.sort((a,c)=>(m[curBucket+"|"+c]||0)-(m[curBucket+"|"+a]||0));
   labs.forEach(l=>{const el=document.createElement("div");el.className="lab"+(l===curLabel&&!curSearch&&view==="normal"?" on":"");
     // 새 편이 들어온 나라는 숫자를 밝게(액센트) 표시한다
-    const fresh=DATA.some(d=>d.n&&d.b===curBucket&&d.l===l);
+    const fresh=DATA.some(d=>isNew(d)&&d.b===curBucket&&d.l===l);
     el.innerHTML=`<span>${esc(l)}</span><span class="c${fresh?" fresh":""}">${m[curBucket+"|"+l]}</span>`;
     el.onclick=()=>{view="normal";curLabel=l;curSearch="";document.getElementById("search").value="";render();};side.appendChild(el);});
 }
@@ -487,9 +507,8 @@ function playItem(d,list,idx,el){
   if(!seen.has(curKey)){seen.add(curKey);saveSet(LS.seen,seen);
     if(el){el.classList.add("seen");el.querySelector(".play").textContent="✓";}}
   // 새로 들어온 편을 한 번 재생하면 '새 편' 표시를 뗀다
-  if(d.n){delete d.n;
-    const ex=loadExtra();const f=ex.find(x=>x.y===d.y);if(f){delete f.n;saveExtra(ex);}
-    buildSide();}
+  // 새 편을 한 번 재생하면 밝은 표시를 뗀다
+  if(d.y&&freshIds.has(d.y)){freshIds.delete(d.y);buildSide();}
   document.querySelectorAll(".item.playing").forEach(e=>e.classList.remove("playing"));
   if(el)el.classList.add("playing");
   const nowT=document.getElementById("nowT"),nowM=document.getElementById("nowM");
@@ -615,7 +634,7 @@ async function checkNew(force){
     localStorage.setItem(LS_LASTCHK,String(Date.now()));
     // 새 편은 원래 속한 국가/주제 폴더에 그대로 들어간다. 알림은 사이드바
     // 숫자를 밝게 하는 것으로 충분하므로 화면을 가로채지 않는다.
-    if(added.length){saveExtra(extra);DATA=mergeExtra();render();}
+    if(added.length){saveExtra(extra);DATA=mergeExtra();refreshNew();render();}
     return added.length;
   }catch(e){return 0;}
   finally{chkBusy=false;}
@@ -625,6 +644,12 @@ checkNew(false);
 document.addEventListener("visibilitychange",()=>{
   if(document.visibilityState==="visible")checkNew(false);});
 
+// 새 편이 있으면 그 편이 들어 있는 폴더를 첫 화면으로 연다(별도 탭 없이)
+(function openFresh(){
+  refreshNew();
+  const f=DATA.filter(isNew).sort((a,b)=>(a.s<b.s?1:-1))[0];
+  if(f){curBucket=f.b;curLabel=f.l;}
+})();
 render();
 
 /* ── 당겨서 새로고침 ──────────────────────────────────────────────────
