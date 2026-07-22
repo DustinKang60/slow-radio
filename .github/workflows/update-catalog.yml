@@ -1,0 +1,41 @@
+name: 카탈로그 자동 갱신
+
+# 채널에 새로 올라온 편을 매일 카탈로그에 넣는다.
+# 커밋이 생기면 Pages 가 재배포되고, 사용자는 다음에 앱을 열 때 자동으로 받는다.
+on:
+  schedule:
+    - cron: "0 21 * * *"   # UTC 21:00 = 한국시간 06:00
+  workflow_dispatch:        # 버튼으로 즉시 실행도 가능
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-catalog
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 새 영상 확인 및 카탈로그 갱신
+        run: python tools/update_catalog.py
+
+      - name: 변경분 커밋
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git config user.name  "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -A
+            git commit -m "카탈로그 자동 갱신"
+            git push
+            echo "갱신 완료"
+          else
+            echo "변경 없음"
+          fi
