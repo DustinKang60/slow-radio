@@ -387,7 +387,7 @@ document.getElementById("timerSel").onchange=e=>setTimer(+e.target.value);
    <video> 에 접근 불가). 안드로이드 크롬은 "전체화면으로 재생 중일 때
    홈으로 나가면" 자동으로 작은 창에 내려주므로, 그 경로를 쓴다.
    그래서 이 버튼은 전체화면을 연 뒤 무엇을 하면 되는지 알려준다. */
-document.getElementById("fsBtn").onclick=async()=>{
+async function enterFullscreen(){
   const f=document.getElementById("ytframe");
   const nowM=document.getElementById("nowM");
   if(!f||f.tagName!=="IFRAME"){nowM.textContent="먼저 재생할 편을 고르세요";return;}
@@ -395,10 +395,28 @@ document.getElementById("fsBtn").onclick=async()=>{
   if(!go){nowM.textContent="이 브라우저는 전체화면을 지원하지 않습니다";return;}
   try{
     await go.call(f);
-    nowM.textContent="홈 버튼을 누르면 작은 창으로 내려갑니다 (소리는 계속)";
+    nowM.textContent="이제 홈 버튼 ▸ 작은 창으로 내려갑니다 (소리 계속)";
   }catch(e){
     nowM.textContent="전체화면을 열 수 없습니다 — 영상 화면을 직접 두 번 누르세요";
   }
+}
+// 처음 한 번은 2단계라는 걸 알려준다. 모르면 "왜 큰 화면이 뜨지?" 하고 헤맨다.
+const PIPHINT="gr_piphint";
+document.getElementById("fsBtn").onclick=()=>{
+  if(localStorage.getItem(PIPHINT)==="1"){enterFullscreen();return;}
+  if(document.querySelector(".over"))return;
+  const o=document.createElement("div");o.className="over";
+  o.innerHTML=`<h2>⛶ 작은 창으로 듣기</h2>
+    <p>버튼 하나로는 작은 창이 열리지 않습니다.<br>브라우저가 유튜브 영상에<br>
+    직접 작은 창을 걸지 못하게 막기 때문입니다.<br><br>
+    <b>① 전체화면이 열립니다</b><br><b>② 그 상태에서 홈 버튼</b><br>
+    → 작은 창으로 내려가고 소리는 계속 납니다.</p>
+    <div class="row"><button class="chip" id="pipGo">전체화면 열기</button>
+    <button class="chip" id="pipNo">취소</button></div>
+    <p style="font-size:11.5px;color:var(--muted)">이 안내는 다시 표시되지 않습니다.</p>`;
+  document.body.appendChild(o);
+  o.querySelector("#pipGo").onclick=()=>{localStorage.setItem(PIPHINT,"1");o.remove();enterFullscreen();};
+  o.querySelector("#pipNo").onclick=()=>o.remove();
 };
 document.getElementById("nextBtn").onclick=playNext;
 let tm;document.getElementById("search").oninput=e=>{clearTimeout(tm);tm=setTimeout(()=>{curSearch=e.target.value.trim();if(curSearch)view="normal";render();},180);};
