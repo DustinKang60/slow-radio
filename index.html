@@ -53,15 +53,8 @@ align-items:center;justify-content:center;color:#fff;font-size:12px}
 .item .d{font-size:11.5px;color:var(--accent2);font-weight:600}
 .item .t{font-size:14px;line-height:1.35}
 .item .tag{font-size:11px;color:var(--muted);margin-top:2px}
-.item .off{color:#4ade80}
 .item .prog{height:3px;background:#2a2d3f;border-radius:2px;margin-top:5px;max-width:260px}
 .item .prog span{display:block;height:100%;background:var(--accent);border-radius:2px}
-#artbox{display:none;width:110px;height:62px;border-radius:7px;background:#1e2132;flex-shrink:0;
-align-items:center;justify-content:center;color:#4ade80;font-size:24px;cursor:pointer}
-.pbar{width:min(300px,70vw);height:6px;background:var(--card);border-radius:3px;overflow:hidden}
-.pbar span{display:block;width:0;height:100%;background:#4ade80;transition:width .15s}
-.imp{color:#4ade80;border-color:#2f5f45}
-.imp:hover{color:#4ade80;border-color:#4ade80}
 .bar{flex-shrink:0;border-top:1px solid var(--border);background:var(--surface);
 display:flex;align-items:center;gap:13px;padding:9px 16px;min-height:60px}
 #ytframe{border-radius:7px;background:#000;flex-shrink:0}
@@ -118,20 +111,16 @@ header{padding:10px 13px;gap:8px;padding-top:calc(10px + env(safe-area-inset-top
 .star{font-size:16px;padding:3px}
 /* 하단 재생바: 유튜브 화면을 줄이고 곡 정보에 폭을 넘김 */
 #ytframe{width:96px;height:54px}
-#artbox{width:96px;height:54px;font-size:20px}
 .bar{gap:10px;padding:7px 12px;min-height:54px;padding-bottom:calc(7px + env(safe-area-inset-bottom))}
 .now .t{font-size:13px}
 .now .m{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .next{padding:6px 11px;font-size:11.5px}
-.imp .w{display:none}
-.imp{font-size:15px;padding:5px 9px}
 }
 /* 아주 좁은 기기 */
 @media(max-width:380px){
 .side{width:112px}
 .lab{font-size:11.5px;padding:6px 7px}
 #ytframe{width:84px;height:47px}
-#artbox{width:84px;height:47px}
 }
 </style></head><body>
 <header>
@@ -151,10 +140,9 @@ header{padding:10px 13px;gap:8px;padding-top:calc(10px + env(safe-area-inset-top
 </div>
 <div class="bar">
   <div id="ytframe"></div>
-  <div id="artbox" title="오디오 파일 다시 가져오기">♪</div>
   <audio id="localAudio" style="display:none"></audio>
   <div class="now"><div class="t idle" id="nowT">재생할 편을 고르세요</div><div class="m" id="nowM">왼쪽에서 국가·지역·주제를 고르면 시간순으로 정렬됩니다</div></div>
-  <button class="next imp" id="impBtn" title="폰의 오디오 파일 가져오기">♪<span class="w"> 파일</span></button>
+  <button class="next" id="fsBtn" title="크게 보기 — 이 상태에서 홈으로 나가면 작은 창으로 내려갑니다">⛶</button>
   <button class="next" id="nextBtn">다음 편 ▶▶</button>
 </div>
 <script>
@@ -164,7 +152,7 @@ let curBucket="국가",curLabel=null,curSearch="",queue=[],qidx=-1;
 let player,ytReady=false,pending=null;
 
 /* ── 로컬 저장: 본 편 / 나중에 보기 / 정렬·필터 ─────────────────────── */
-const LS={seen:"gr_seen",later:"gr_later",sort:"gr_sort",hide:"gr_hide",pos:"gr_pos",asked:"gr_asked"};
+const LS={seen:"gr_seen",later:"gr_later",sort:"gr_sort",hide:"gr_hide",pos:"gr_pos"};
 function loadSet(k){try{return new Set(JSON.parse(localStorage.getItem(k)||"[]"));}catch(e){return new Set();}}
 function saveSet(k,s){try{localStorage.setItem(k,JSON.stringify([...s]));}catch(e){}}
 const seen=loadSet(LS.seen),later=loadSet(LS.later);
@@ -207,7 +195,7 @@ function buildSide(){
     el.onclick=()=>{view="normal";curLabel=l;curSearch="";document.getElementById("search").value="";render();};side.appendChild(el);});
 }
 function render(){
-  buildSide();updateImp();const c=document.getElementById("content");let list,head,sub;
+  buildSide();const c=document.getElementById("content");let list,head,sub;
   if(view==="later"){
     list=DATA.filter(d=>later.has(keyOf(d)));
     head="★ 나중에 보기";sub=list.length+"편 저장됨";
@@ -242,7 +230,7 @@ function render(){
     el.className="item"+(d.k==="audio"?" audio":"")+(isSeen?" seen":"")+(k===curKey?" playing":"");
     el.dataset.k=k;
     el.innerHTML=`<div class="play">${isSeen?"✓":"▶"}</div><div><div class="d">${esc(d.d||"날짜미상")}</div>
-      <div class="t">${esc(d.t)}</div><div class="tag">${esc(d.b)} · ${esc(d.l)}${localSet.has(k)?' · <span class="off">♪ 오디오</span>':""}</div>
+      <div class="t">${esc(d.t)}</div><div class="tag">${esc(d.b)} · ${esc(d.l)}</div>
       ${posMap[k]&&posMap[k].d?`<div class="prog"><span style="width:${Math.min(100,Math.round(posMap[k].p/posMap[k].d*100))}%"></span></div>`:""}</div>
       <button class="star${isLater?" on":""}" title="나중에 보기">${isLater?"★":"☆"}</button>`;
     el.onclick=()=>playItem(d,list,i,el);
@@ -266,96 +254,9 @@ function setMediaSession(d){
     navigator.mediaSession.setActionHandler("nexttrack",playNext);
   }catch(e){}
 }
-/* ── 가져온 오디오 (IndexedDB · 24시간 뒤 자동 삭제) ──────────────────
-   폰에서 고른 오디오 파일을 앱 저장소에 넣고 <audio> 로 재생한다.
-   이 경로라야 화면을 꺼도, 다른 앱을 써도 소리가 이어진다.
-   파일은 어디에도 업로드되지 않는다. 쌓이지 않도록 가져온 지 24시간이
-   지난 파일은 앱을 열 때마다 자동으로 지운다. */
-const DBN="globe-radio",STORE="audio",TTL=24*60*60*1000;
-const localSet=new Set();
-let dbp=null;
-function idb(){if(!dbp)dbp=new Promise((res,rej)=>{const r=indexedDB.open(DBN,1);
-  r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains(STORE))r.result.createObjectStore(STORE);};
-  r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});return dbp;}
-function store(mode){return idb().then(d=>d.transaction(STORE,mode).objectStore(STORE));}
-function req(r){return new Promise((res,rej)=>{r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
-async function putAudio(k,f){return req((await store("readwrite")).put({blob:f,at:Date.now(),name:f.name},k));}
-async function getAudio(k){return req((await store("readonly")).get(k));}
-async function delAudio(k){localSet.delete(k);return req((await store("readwrite")).delete(k));}
-async function sweep(){                     // 24시간 지난 파일 정리
-  try{
-    const keys=await req((await store("readonly")).getAllKeys());
-    const vals=await req((await store("readonly")).getAll());
-    const now=Date.now();let dropped=0;localSet.clear();
-    for(let i=0;i<keys.length;i++){const k=String(keys[i]),v=vals[i];
-      if(!v||!v.blob||now-(v.at||0)>TTL){await delAudio(k);dropped++;}
-      else localSet.add(k);}
-    return dropped;
-  }catch(e){return 0;}
-}
-sweep().then(n=>{if(n||localSet.size)render();});
-document.addEventListener("visibilitychange",()=>{
-  if(document.visibilityState==="visible")sweep().then(n=>{if(n)render();});});
-
-/* 파일 이름 → 목록 항목 매칭. 번호(s)든 제목이든 붙는다. */
-function norm(s){return String(s).toLowerCase().replace(/[^0-9a-z가-힣]/g,"");}
-let idxS=null,idxT=null;
-function buildIdx(){if(idxS)return;idxS=new Map();idxT=new Map();
-  DATA.forEach(d=>{idxS.set(String(d.s),d);
-    const n=parseInt(d.s,10);if(!isNaN(n))idxS.set(String(n),d);
-    idxT.set(norm(d.t),d);});}
-function matchFile(name){buildIdx();
-  const base=name.replace(/\.[^.]+$/,"").trim();
-  if(idxS.has(base))return idxS.get(base);
-  const num=parseInt(base,10);
-  if(!isNaN(num)&&idxS.has(String(num)))return idxS.get(String(num));
-  const n=norm(base);if(!n)return null;
-  if(idxT.has(n))return idxT.get(n);
-  for(const[k,v]of idxT){if(k.length>10&&(k.includes(n)||n.includes(k)))return v;}
-  return null;}
-
-function overlay(html){const o=document.createElement("div");o.className="over";
-  o.innerHTML=html;document.body.appendChild(o);return o;}
-function fmtT(sec){const m=Math.floor(sec/60);
-  return m<60?Math.max(1,m)+"분":Math.floor(m/60)+"시간 "+(m%60?m%60+"분":"");}
+/* 표시용 시간 포맷 */
 function fmtPos(sec){const s=Math.floor(sec);
   return Math.floor(s/60)+":"+String(s%60).padStart(2,"0");}
-
-/* 파일 고르기 → 저장. 처음 한 번, 그리고 파일을 추가할 때만 쓴다. */
-let importing=false;
-function importAudio(after){
-  if(importing)return;
-  const inp=document.createElement("input");
-  inp.type="file";inp.accept="audio/*";inp.multiple=true;
-  inp.onchange=async()=>{
-    localStorage.setItem(LS.asked,"1");
-    const files=[...inp.files];if(!files.length){if(after)after();return;}
-    importing=true;
-    const o=overlay(`<h2>오디오 가져오는 중</h2>
-      <div class="pbar"><span id="pb"></span></div>
-      <p id="pmsg">0 / ${files.length}</p>
-      <p style="font-size:12px">파일은 폰 안에만 저장됩니다. 24시간 뒤 자동으로 지워집니다.</p>
-      <div class="row"><button class="chip" id="pstop">중단</button></div>`);
-    let stop=false;o.querySelector("#pstop").onclick=()=>{stop=true;};
-    let ok=0,miss=0,bytes=0,full=false;
-    for(let i=0;i<files.length&&!stop;i++){
-      const f=files[i],d=matchFile(f.name);
-      if(d){try{const k=keyOf(d);await putAudio(k,f);localSet.add(k);ok++;bytes+=f.size;}
-        catch(e){if(String(e&&e.name).indexOf("Quota")>=0){full=true;break;}miss++;}}
-      else miss++;
-      o.querySelector("#pb").style.width=Math.round((i+1)/files.length*100)+"%";
-      o.querySelector("#pmsg").textContent=(i+1)+" / "+files.length+" · "+ok+"편 연결 · "+Math.round(bytes/1048576)+"MB";
-    }
-    importing=false;o.remove();render();
-    if(full)alert("저장 공간이 가득 찼습니다. "+ok+"편까지 저장했습니다.");
-    else if(miss)alert(ok+"편을 연결했습니다.\n이름이 목록과 맞지 않아 건너뛴 파일 "+miss+"개");
-    if(after)after();
-  };
-  inp.click();
-}
-// 가져온 파일이 하나도 없을 때만 하단에 ♪ 버튼을 보여준다. 한 편이라도 있으면 숨는다.
-function updateImp(){const b=document.getElementById("impBtn");
-  if(b)b.style.display=localSet.size?"none":"";}
 
 /* ── 이어듣기: 재생 위치 저장 ─────────────────────────────────────── */
 let posMap={};try{posMap=JSON.parse(localStorage.getItem(LS.pos)||"{}");}catch(e){}
@@ -376,42 +277,16 @@ setInterval(()=>{try{
 }catch(e){}},5000);
 
 /* ── 재생 ─────────────────────────────────────────────────────────── */
-let curURL=null;
-function setArt(on){
-  const f=document.getElementById("ytframe"),b=document.getElementById("artbox");
-  if(f)f.style.display=on?"none":"";
-  if(b)b.style.display=on?"flex":"none";
-}
 function playYT(d,nowM){
-  A.pause();A.removeAttribute("src");setArt(false);
-  if(!d.y){if(nowM)nowM.textContent="이 편은 오디오 파일이 있어야 재생됩니다";return;}
+  A.pause();A.removeAttribute("src");
+  if(!d.y){if(nowM)nowM.textContent="재생할 수 있는 영상이 없습니다";return;}
   const k=keyOf(d),pos=getPos(k),dur=posMap[k]?posMap[k].d:0;
   const start=(pos>15&&(!dur||pos<dur-20))?pos:0;
   if(ytReady)player.loadVideoById({videoId:d.y,startSeconds:start});
   else pending={videoId:d.y,startSeconds:start};
   if(nowM&&start)nowM.textContent=(d.d||"")+" · "+d.l+" · "+fmtPos(start)+"부터 이어듣기";
 }
-async function playLocal(d,nowM){
-  const k=keyOf(d);let rec=null;
-  try{rec=await getAudio(k);}catch(e){}
-  if(!rec||!rec.blob)return false;
-  if(Date.now()-(rec.at||0)>TTL){await delAudio(k);return false;}
-  try{if(ytReady&&player&&player.stopVideo)player.stopVideo();}catch(e){}
-  setArt(true);
-  if(curURL)URL.revokeObjectURL(curURL);
-  curURL=URL.createObjectURL(rec.blob);
-  A.src=curURL;
-  const pos=getPos(k);let resumed=false;
-  // 길이를 알아야 이어듣기 여부를 판단할 수 있으므로 메타데이터를 기다린다.
-  await new Promise(res=>{let done=false;const fin=()=>{if(!done){done=true;res();}};
-    A.onloadedmetadata=()=>{if(pos>15&&A.duration&&pos<A.duration-20){A.currentTime=pos;resumed=true;}fin();};
-    setTimeout(fin,1500);});
-  try{await A.play();}catch(e){setArt(false);return false;}
-  const left=Math.max(0,TTL-(Date.now()-rec.at))/1000;
-  nowM.textContent=(d.d||"")+" · "+d.l+" · 오디오"+(resumed?" · "+fmtPos(pos)+"부터":"")+" · "+fmtT(left)+" 뒤 삭제";
-  return true;
-}
-async function playItem(d,list,idx,el){
+function playItem(d,list,idx,el){
   queue=list;qidx=idx;curKey=keyOf(d);
   setMediaSession(d);
   if(!seen.has(curKey)){seen.add(curKey);saveSet(LS.seen,seen);
@@ -421,14 +296,6 @@ async function playItem(d,list,idx,el){
   const nowT=document.getElementById("nowT"),nowM=document.getElementById("nowM");
   nowT.className="t";nowT.textContent=d.t;
   nowM.textContent=(d.d||"")+" · "+d.l;
-  if(localSet.has(curKey)&&await playLocal(d,nowM))return;
-  // 아직 한 번도 가져온 적이 없으면, 첫 재생에서 곧바로 파일 선택창을 연다.
-  // 여기서 취소하더라도 다시는 가로막지 않는다(이후엔 하단 ♪ 파일 버튼으로).
-  if(!localSet.size&&!localStorage.getItem(LS.asked)){
-    localStorage.setItem(LS.asked,"1");
-    importAudio(()=>playItem(d,list,idx,el));
-    return;
-  }
   playYT(d,nowM);
 }
 // 큐와 화면 목록이 다를 수 있으므로 인덱스가 아니라 키로 엘리먼트를 찾는다.
@@ -477,10 +344,12 @@ function shutdown(){
 function closeApp(){try{window.close();}catch(e){}}
 document.getElementById("timerSel").onchange=e=>setTimer(+e.target.value);
 // 눈에 띄는 버튼 대신: 재생 중인 음표를 누르거나 곡 정보를 두 번 누르면 다시 가져오기
-document.getElementById("artbox").onclick=()=>importAudio();
-document.getElementById("impBtn").onclick=()=>importAudio();
-document.querySelector(".now").ondblclick=()=>importAudio();
-updateImp();
+// 크게 보기 → 이 상태에서 홈으로 나가면 크롬이 작은 창(PiP)으로 내려준다.
+document.getElementById("fsBtn").onclick=()=>{
+  const f=document.querySelector("#ytframe")||document.getElementById("ytframe");
+  const go=f.requestFullscreen||f.webkitRequestFullscreen||f.webkitEnterFullscreen;
+  if(go)try{go.call(f);}catch(e){}
+};
 document.getElementById("nextBtn").onclick=playNext;
 let tm;document.getElementById("search").oninput=e=>{clearTimeout(tm);tm=setTimeout(()=>{curSearch=e.target.value.trim();if(curSearch)view="normal";render();},180);};
 render();
