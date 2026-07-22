@@ -60,6 +60,8 @@ align-items:center;justify-content:center;color:#fff;font-size:12px}
 align-items:center;justify-content:center;color:#4ade80;font-size:24px;cursor:pointer}
 .pbar{width:min(300px,70vw);height:6px;background:var(--card);border-radius:3px;overflow:hidden}
 .pbar span{display:block;width:0;height:100%;background:#4ade80;transition:width .15s}
+.imp{color:#4ade80;border-color:#2f5f45}
+.imp:hover{color:#4ade80;border-color:#4ade80}
 .bar{flex-shrink:0;border-top:1px solid var(--border);background:var(--surface);
 display:flex;align-items:center;gap:13px;padding:9px 16px;min-height:60px}
 #ytframe{border-radius:7px;background:#000;flex-shrink:0}
@@ -121,6 +123,8 @@ header{padding:10px 13px;gap:8px;padding-top:calc(10px + env(safe-area-inset-top
 .now .t{font-size:13px}
 .now .m{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .next{padding:6px 11px;font-size:11.5px}
+.imp .w{display:none}
+.imp{font-size:15px;padding:5px 9px}
 }
 /* 아주 좁은 기기 */
 @media(max-width:380px){
@@ -150,6 +154,7 @@ header{padding:10px 13px;gap:8px;padding-top:calc(10px + env(safe-area-inset-top
   <div id="artbox" title="오디오 파일 다시 가져오기">♪</div>
   <audio id="localAudio" style="display:none"></audio>
   <div class="now"><div class="t idle" id="nowT">재생할 편을 고르세요</div><div class="m" id="nowM">왼쪽에서 국가·지역·주제를 고르면 시간순으로 정렬됩니다</div></div>
+  <button class="next imp" id="impBtn" title="폰의 오디오 파일 가져오기">♪<span class="w"> 파일</span></button>
   <button class="next" id="nextBtn">다음 편 ▶▶</button>
 </div>
 <script>
@@ -202,7 +207,7 @@ function buildSide(){
     el.onclick=()=>{view="normal";curLabel=l;curSearch="";document.getElementById("search").value="";render();};side.appendChild(el);});
 }
 function render(){
-  buildSide();const c=document.getElementById("content");let list,head,sub;
+  buildSide();updateImp();const c=document.getElementById("content");let list,head,sub;
   if(view==="later"){
     list=DATA.filter(d=>later.has(keyOf(d)));
     head="★ 나중에 보기";sub=list.length+"편 저장됨";
@@ -348,16 +353,9 @@ function importAudio(after){
   };
   inp.click();
 }
-// 최초 1회만 묻는다. 이후에는 하단 재생바의 음표를 누르면 다시 가져올 수 있다.
-function askImport(after){
-  const o=overlay(`<h2>오디오 파일 가져오기</h2>
-    <p>폰에 있는 오디오 파일을 가져오면 <b>화면을 꺼도 재생이 이어집니다.</b><br>
-    파일은 어디에도 업로드되지 않고, 가져온 지 24시간이 지나면 자동으로 지워집니다.</p>
-    <div class="row"><button class="chip" id="doImp">파일 고르기</button>
-    <button class="chip" id="noImp">유튜브로 듣기</button></div>`);
-  o.querySelector("#doImp").onclick=()=>{o.remove();importAudio(after);};
-  o.querySelector("#noImp").onclick=()=>{o.remove();localStorage.setItem(LS.asked,"1");if(after)after();};
-}
+// 가져온 파일이 하나도 없을 때만 하단에 ♪ 버튼을 보여준다. 한 편이라도 있으면 숨는다.
+function updateImp(){const b=document.getElementById("impBtn");
+  if(b)b.style.display=localSet.size?"none":"";}
 
 /* ── 이어듣기: 재생 위치 저장 ─────────────────────────────────────── */
 let posMap={};try{posMap=JSON.parse(localStorage.getItem(LS.pos)||"{}");}catch(e){}
@@ -424,9 +422,13 @@ async function playItem(d,list,idx,el){
   nowT.className="t";nowT.textContent=d.t;
   nowM.textContent=(d.d||"")+" · "+d.l;
   if(localSet.has(curKey)&&await playLocal(d,nowM))return;
-  // 아직 한 번도 가져온 적이 없으면, 재생 버튼이 곧 가져오기 버튼이 된다.
-  if(!localStorage.getItem(LS.asked)&&!localSet.size){
-    askImport(()=>playItem(d,list,idx,el));return;}
+  // 아직 한 번도 가져온 적이 없으면, 첫 재생에서 곧바로 파일 선택창을 연다.
+  // 여기서 취소하더라도 다시는 가로막지 않는다(이후엔 하단 ♪ 파일 버튼으로).
+  if(!localSet.size&&!localStorage.getItem(LS.asked)){
+    localStorage.setItem(LS.asked,"1");
+    importAudio(()=>playItem(d,list,idx,el));
+    return;
+  }
   playYT(d,nowM);
 }
 // 큐와 화면 목록이 다를 수 있으므로 인덱스가 아니라 키로 엘리먼트를 찾는다.
@@ -476,7 +478,9 @@ function closeApp(){try{window.close();}catch(e){}}
 document.getElementById("timerSel").onchange=e=>setTimer(+e.target.value);
 // 눈에 띄는 버튼 대신: 재생 중인 음표를 누르거나 곡 정보를 두 번 누르면 다시 가져오기
 document.getElementById("artbox").onclick=()=>importAudio();
+document.getElementById("impBtn").onclick=()=>importAudio();
 document.querySelector(".now").ondblclick=()=>importAudio();
+updateImp();
 document.getElementById("nextBtn").onclick=playNext;
 let tm;document.getElementById("search").oninput=e=>{clearTimeout(tm);tm=setTimeout(()=>{curSearch=e.target.value.trim();if(curSearch)view="normal";render();},180);};
 render();

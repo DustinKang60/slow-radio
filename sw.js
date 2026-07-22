@@ -1,7 +1,7 @@
 // 지구본 라디오 서비스워커
 // ⚠️ index.html 등 에셋을 고치면 CACHE_NAME 버전을 반드시 올릴 것.
 //    안 올리면 기기가 캐시된 옛 코드를 계속 써서 "수정이 반영 안 됨"으로 오판하게 된다.
-const CACHE_NAME = 'globe-radio-v9';
+const CACHE_NAME = 'globe-radio-v10';
 const SHELL = [
   './',
   './index.html',
