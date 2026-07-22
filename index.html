@@ -34,6 +34,16 @@ align-items:center;justify-content:center;gap:15px;text-align:center;padding:24p
 .over h2{font-size:21px}
 .over p{font-size:13px;color:var(--sub);line-height:1.7}
 .over .row{display:flex;gap:8px}
+.over input{background:var(--surface);border:1px solid var(--border);color:var(--text);
+border-radius:9px;padding:10px 13px;font-size:13px;width:min(420px,86vw);outline:none;font-family:inherit}
+.over input:focus{border-color:var(--accent)}
+.over .st{font-size:12.5px;min-height:17px}
+.over .st.ok{color:var(--ok,#4ade80)}
+.over .st.err{color:#f87171}
+/* 헤더 아이콘 버튼(설정) */
+.iconbtn{background:var(--surface);border:1px solid var(--border);color:var(--sub);border-radius:50%;
+width:34px;height:34px;font-size:15px;cursor:pointer;flex-shrink:0;line-height:1;padding:0}
+.iconbtn:hover{color:var(--text);border-color:var(--accent)}
 /* overflow:hidden 필수 — #ptr 이 translateY(-46px) 로 위로 숨는데, 안 자르면
    그게 헤더 위(z-index:5, 불투명 배경)에 그려져 로고·검색창을 가린다. */
 .main{flex:1;display:flex;min-height:0;position:relative;overflow:hidden}
@@ -147,6 +157,7 @@ header{padding:10px 13px;gap:8px;padding-top:calc(10px + env(safe-area-inset-top
     <option value="120">2시간 뒤 종료</option>
   </select>
   <span id="timerLeft"></span>
+  <button id="setBtn" class="iconbtn" title="설정 — 배경 재생 서버">⚙</button>
 </header>
 <div class="main">
   <div class="side" id="side"></div>
@@ -289,9 +300,63 @@ setInterval(()=>{try{
     setPos(curKey,player.getCurrentTime(),player.getDuration());
 }catch(e){}},5000);
 
+/* ── 배경 재생 서버 ────────────────────────────────────────────────────
+   유튜브 임베드는 화면을 끄면 브라우저가 네트워크를 멈춰 소리가 끊긴다.
+   개인 서버(mytube 서버와 동일: GET /audio/<videoId>)가 있으면 오디오 파일을
+   '통째로' 받아 메모리에서 재생한다. 재생 중 네트워크가 필요 없으므로
+   화면을 꺼도 끝까지 나온다. 주소는 기기의 localStorage 에만 저장한다
+   (터널 주소는 사실상 공개 엔드포인트라 코드/저장소에 넣지 않는다). */
+const LS_SERVER="gr_server";
+function normServer(raw){const u=(raw||"").trim().replace(/\/+$/,"");
+  return !u?"":(/^https?:\/\//i.test(u)?u:"https://"+u);}
+function getServer(){return normServer(localStorage.getItem(LS_SERVER));}
+
+let dlAbort=null,blobUrl=null;
+function revokeBlob(){if(blobUrl){try{URL.revokeObjectURL(blobUrl);}catch(e){}blobUrl=null;}}
+
+async function playViaServer(d,nowM){
+  const server=getServer(),myKey=keyOf(d);
+  if(dlAbort)dlAbort.abort();
+  dlAbort=new AbortController();
+  const signal=dlAbort.signal;
+  try{if(ytReady&&player.stopVideo)player.stopVideo();}catch(e){}
+  nowM.textContent="서버 준비 중…";
+  try{
+    const resp=await fetch(server+"/audio/"+encodeURIComponent(d.y),{signal});
+    if(!resp.ok)throw new Error("server "+resp.status);
+    const total=parseInt(resp.headers.get("Content-Length")||"0",10);
+    const reader=resp.body.getReader();
+    const chunks=[];let got=0;
+    for(;;){
+      const {done,value}=await reader.read();
+      if(done)break;
+      if(curKey!==myKey){reader.cancel();return;}   // 사용자가 다른 편을 눌렀다
+      chunks.push(value);got+=value.length;
+      nowM.textContent=total?`받는 중 ${Math.floor(got/total*100)}%`
+                            :`받는 중 ${(got/1048576).toFixed(1)}MB`;
+    }
+    if(curKey!==myKey)return;
+    const blob=new Blob(chunks,{type:resp.headers.get("Content-Type")||"audio/mp4"});
+    revokeBlob();blobUrl=URL.createObjectURL(blob);
+    const pos=getPos(myKey);
+    A.addEventListener("loadedmetadata",()=>{
+      if(pos>15&&(!A.duration||pos<A.duration-20))A.currentTime=pos;},{once:true});
+    A.src=blobUrl;A.load();
+    await A.play();
+    nowM.textContent=(d.d||"")+" · "+d.l+" · 화면 꺼도 재생";
+  }catch(e){
+    if(signal.aborted)return;
+    nowM.textContent="서버 실패 — 유튜브로 전환";
+    keepAwake();playYT(d,nowM);
+  }
+}
+
 /* ── 재생 ─────────────────────────────────────────────────────────── */
 function playYT(d,nowM){
-  A.pause();A.removeAttribute("src");
+  if(dlAbort){dlAbort.abort();dlAbort=null;}   // 받던 오디오가 있으면 중단
+  // removeAttribute 만으로는 currentSrc 가 남아 blob 이 메모리에 붙들린다.
+  // load() 로 확실히 비우고 blob URL 도 해제한다.
+  A.pause();A.removeAttribute("src");A.load();revokeBlob();
   if(!d.y){if(nowM)nowM.textContent="재생할 수 있는 영상이 없습니다";return;}
   const k=keyOf(d),pos=getPos(k),dur=posMap[k]?posMap[k].d:0;
   const start=(pos>15&&(!dur||pos<dur-20))?pos:0;
@@ -316,7 +381,6 @@ document.addEventListener("visibilitychange",()=>{
   if(document.visibilityState==="visible"&&curKey)keepAwake();});
 function playItem(d,list,idx,el){
   queue=list;qidx=idx;curKey=keyOf(d);
-  keepAwake();
   setMediaSession(d);
   if(!seen.has(curKey)){seen.add(curKey);saveSet(LS.seen,seen);
     if(el){el.classList.add("seen");el.querySelector(".play").textContent="✓";}}
@@ -325,7 +389,10 @@ function playItem(d,list,idx,el){
   const nowT=document.getElementById("nowT"),nowM=document.getElementById("nowM");
   nowT.className="t";nowT.textContent=d.t;
   nowM.textContent=(d.d||"")+" · "+d.l;
-  playYT(d,nowM);
+  // 서버가 설정돼 있으면 오디오를 통째로 받아 재생(화면 꺼도 계속),
+  // 아니면 기존 유튜브 임베드(화면 켜둬야 함)로 재생한다.
+  if(getServer()&&d.y){releaseAwake();playViaServer(d,nowM);}
+  else{keepAwake();playYT(d,nowM);}
 }
 // 큐와 화면 목록이 다를 수 있으므로 인덱스가 아니라 키로 엘리먼트를 찾는다.
 function playNext(){
@@ -375,6 +442,37 @@ document.getElementById("timerSel").onchange=e=>setTimer(+e.target.value);
 /* PiP(작은 창) 버튼은 제거했다. 유튜브 임베드는 교차출처라 브라우저가 PiP 를
    걸어주지 않고, '전체화면 → 홈' 경로도 설치형·브라우저 양쪽에서 앱만 종료되고
    소리가 끊기는 것을 실측으로 확인했다. 배경 재생은 오디오를 직접 서빙해야 한다. */
+/* ── 설정: 배경 재생 서버 주소 ─────────────────────────────────────── */
+document.getElementById("setBtn").onclick=()=>{
+  if(document.querySelector(".over"))return;
+  const o=document.createElement("div");o.className="over";
+  o.innerHTML=`<h2>⚙ 설정</h2>
+    <p>배경 재생 서버 주소<br>
+    <span style="color:var(--muted)">넣으면 오디오를 통째로 받아 재생해 <b>화면을 꺼도</b> 이어집니다.<br>
+    비워두면 유튜브로 재생되며 화면을 끄면 소리가 끊깁니다.</span></p>
+    <input id="srvIn" placeholder="예: xxxx.trycloudflare.com" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <div class="st" id="srvSt"></div>
+    <div class="row"><button class="chip" id="srvSave">저장 · 연결 확인</button>
+    <button class="chip" id="srvClose">닫기</button></div>`;
+  document.body.appendChild(o);
+  const inp=o.querySelector("#srvIn"),st=o.querySelector("#srvSt");
+  inp.value=getServer();
+  o.querySelector("#srvClose").onclick=()=>o.remove();
+  o.querySelector("#srvSave").onclick=async()=>{
+    const url=normServer(inp.value);
+    localStorage.setItem(LS_SERVER,url);inp.value=url;
+    if(!url){st.className="st";st.textContent="서버 없음 — 유튜브로 재생합니다.";return;}
+    st.className="st";st.textContent="연결 확인 중…";
+    try{
+      const c=new AbortController();const t=setTimeout(()=>c.abort(),8000);
+      const r=await fetch(url+"/health",{signal:c.signal});clearTimeout(t);
+      if(!r.ok)throw new Error("bad");
+      st.className="st ok";st.textContent="✓ 서버 연결됨 — 화면 꺼도 재생됩니다.";
+    }catch(e){
+      st.className="st err";st.textContent="✗ 연결할 수 없습니다. 주소와 서버 상태를 확인하세요.";
+    }
+  };
+};
 document.getElementById("nextBtn").onclick=playNext;
 let tm;document.getElementById("search").oninput=e=>{clearTimeout(tm);tm=setTimeout(()=>{curSearch=e.target.value.trim();if(curSearch)view="normal";render();},180);};
 render();
