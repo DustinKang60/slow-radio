@@ -72,12 +72,6 @@ display:flex;align-items:center;gap:13px;padding:9px 16px;min-height:60px}
 #ytframe{border-radius:7px;background:#000;flex-shrink:0}
 .now{flex:1;min-width:0}.now .t{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .now .m{font-size:12px;color:var(--sub)}.now .idle{color:var(--muted)}
-/* 작은 창(PiP) — 가장 자주 쓰는 버튼이라 크고 눈에 띄게. */
-.pip{display:flex;align-items:center;gap:6px;background:var(--accent);border:0;color:#fff;
-border-radius:20px;padding:11px 17px;font-size:14px;font-weight:700;cursor:pointer;
-white-space:nowrap;flex-shrink:0;font-family:inherit;line-height:1}
-.pip:hover{background:var(--accent2)}
-.pip .ic{font-size:17px;line-height:1}
 .next{background:var(--card);border:1px solid var(--border);color:var(--sub);border-radius:16px;
 padding:7px 13px;font-size:12px;cursor:pointer;white-space:nowrap}.next:hover{color:var(--text);border-color:var(--accent)}
 /* 정렬·필터 툴바 */
@@ -133,9 +127,6 @@ header{padding:10px 13px;gap:8px;padding-top:calc(10px + env(safe-area-inset-top
 .now .t{font-size:13px}
 .now .m{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .next{padding:6px 10px;font-size:11.5px}
-/* PiP 는 모바일에서도 작게 만들지 않는다 — 가장 많이 누르는 버튼 */
-.pip{padding:10px 15px;font-size:13.5px;gap:5px}
-.pip .ic{font-size:16px}
 }
 /* 아주 좁은 기기 */
 @media(max-width:380px){
@@ -165,7 +156,6 @@ header{padding:10px 13px;gap:8px;padding-top:calc(10px + env(safe-area-inset-top
   <div id="ytframe"></div>
   <audio id="localAudio" style="display:none"></audio>
   <div class="now"><div class="t idle" id="nowT">재생할 편을 고르세요</div><div class="m" id="nowM">왼쪽에서 국가·지역·주제를 고르면 시간순으로 정렬됩니다</div></div>
-  <button class="pip" id="fsBtn" title="작은 창으로 — 전체화면이 열리면 홈 버튼을 누르세요. 소리는 계속 나옵니다"><span class="ic">⛶</span>PiP</button>
   <button class="next" id="nextBtn">다음 편 ▶▶</button>
 </div>
 <script>
@@ -382,42 +372,9 @@ function shutdown(){
 // 스크립트가 연 창이 아니면 close()가 막힌다. 그때는 안내 화면이 그대로 남는다.
 function closeApp(){try{window.close();}catch(e){}}
 document.getElementById("timerSel").onchange=e=>setTimer(+e.target.value);
-/* ── 작은 창(PiP)으로 보내기 ────────────────────────────────────────────
-   페이지에서 유튜브 iframe 에 직접 PiP 를 걸 수는 없다(교차출처라 안쪽
-   <video> 에 접근 불가). 안드로이드 크롬은 "전체화면으로 재생 중일 때
-   홈으로 나가면" 자동으로 작은 창에 내려주므로, 그 경로를 쓴다.
-   그래서 이 버튼은 전체화면을 연 뒤 무엇을 하면 되는지 알려준다. */
-async function enterFullscreen(){
-  const f=document.getElementById("ytframe");
-  const nowM=document.getElementById("nowM");
-  if(!f||f.tagName!=="IFRAME"){nowM.textContent="먼저 재생할 편을 고르세요";return;}
-  const go=f.requestFullscreen||f.webkitRequestFullscreen;
-  if(!go){nowM.textContent="이 브라우저는 전체화면을 지원하지 않습니다";return;}
-  try{
-    await go.call(f);
-    nowM.textContent="이제 홈 버튼 ▸ 작은 창으로 내려갑니다 (소리 계속)";
-  }catch(e){
-    nowM.textContent="전체화면을 열 수 없습니다 — 영상 화면을 직접 두 번 누르세요";
-  }
-}
-// 처음 한 번은 2단계라는 걸 알려준다. 모르면 "왜 큰 화면이 뜨지?" 하고 헤맨다.
-const PIPHINT="gr_piphint";
-document.getElementById("fsBtn").onclick=()=>{
-  if(localStorage.getItem(PIPHINT)==="1"){enterFullscreen();return;}
-  if(document.querySelector(".over"))return;
-  const o=document.createElement("div");o.className="over";
-  o.innerHTML=`<h2>⛶ 작은 창으로 듣기</h2>
-    <p>버튼 하나로는 작은 창이 열리지 않습니다.<br>브라우저가 유튜브 영상에<br>
-    직접 작은 창을 걸지 못하게 막기 때문입니다.<br><br>
-    <b>① 전체화면이 열립니다</b><br><b>② 그 상태에서 홈 버튼</b><br>
-    → 작은 창으로 내려가고 소리는 계속 납니다.</p>
-    <div class="row"><button class="chip" id="pipGo">전체화면 열기</button>
-    <button class="chip" id="pipNo">취소</button></div>
-    <p style="font-size:11.5px;color:var(--muted)">이 안내는 다시 표시되지 않습니다.</p>`;
-  document.body.appendChild(o);
-  o.querySelector("#pipGo").onclick=()=>{localStorage.setItem(PIPHINT,"1");o.remove();enterFullscreen();};
-  o.querySelector("#pipNo").onclick=()=>o.remove();
-};
+/* PiP(작은 창) 버튼은 제거했다. 유튜브 임베드는 교차출처라 브라우저가 PiP 를
+   걸어주지 않고, '전체화면 → 홈' 경로도 설치형·브라우저 양쪽에서 앱만 종료되고
+   소리가 끊기는 것을 실측으로 확인했다. 배경 재생은 오디오를 직접 서빙해야 한다. */
 document.getElementById("nextBtn").onclick=playNext;
 let tm;document.getElementById("search").oninput=e=>{clearTimeout(tm);tm=setTimeout(()=>{curSearch=e.target.value.trim();if(curSearch)view="normal";render();},180);};
 render();
