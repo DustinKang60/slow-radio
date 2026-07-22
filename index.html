@@ -66,7 +66,6 @@ padding:7px 13px;font-size:12px;cursor:pointer;white-space:nowrap}.next:hover{co
 border-radius:7px;padding:5px 11px;font-size:12px;cursor:pointer;font-family:inherit;outline:none}
 .chip:hover,.toolbar select:hover{color:var(--text)}
 .chip.on{background:var(--card);color:var(--text);border-color:var(--accent)}
-.stat{font-size:12px;color:var(--muted);padding:0 4px}
 /* 시청 표시 */
 .item.seen{opacity:.5}
 .item.seen .play{background:var(--muted)}
@@ -169,16 +168,11 @@ function render(){
     <div class="toolbar">
       <select id="sortSel"><option value="desc">최신순</option><option value="asc">오래된순</option></select>
       <button class="chip${hideSeen?" on":""}" id="hideBtn">안 본 편만</button>
-      <span class="stat">✓ 본 편 ${seen.size}</span>
-      <button class="chip" id="backupBtn" title="본 기록·나중에 보기를 파일로 저장">백업</button>
-      <button class="chip" id="restoreBtn" title="백업 파일을 합쳐서 불러오기 (기존 기록은 유지)">복원</button>
       ${view==="later"&&later.size?'<button class="chip" id="clrLater">목록 비우기</button>':""}
     </div>`;
   const sel=c.querySelector("#sortSel");sel.value=sortDesc?"desc":"asc";
   sel.onchange=e=>{sortDesc=e.target.value==="desc";localStorage.setItem(LS.sort,sortDesc?"desc":"asc");render();};
   c.querySelector("#hideBtn").onclick=()=>{hideSeen=!hideSeen;localStorage.setItem(LS.hide,hideSeen?"1":"0");render();};
-  c.querySelector("#backupBtn").onclick=backup;
-  c.querySelector("#restoreBtn").onclick=restore;
   const cl=c.querySelector("#clrLater");
   if(cl)cl.onclick=()=>{if(confirm("나중에 보기 목록을 비울까요?")){later.clear();saveSet(LS.later,later);render();}};
   if(!list.length){const e=document.createElement("div");e.className="empty";
@@ -198,25 +192,7 @@ function render(){
     frag.appendChild(el);});
   c.appendChild(frag);
 }
-/* 본 기록은 지우는 기능을 두지 않는다. 백업은 파일로, 복원은 합치기만 한다(삭제 없음). */
-function backup(){
-  const blob=new Blob([JSON.stringify({v:1,at:new Date().toISOString(),seen:[...seen],later:[...later]},null,1)],
-    {type:"application/json"});
-  const a=document.createElement("a");a.href=URL.createObjectURL(blob);
-  a.download="지구본라디오-기록-"+new Date().toISOString().slice(0,10)+".json";
-  a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
-}
-function restore(){
-  const inp=document.createElement("input");inp.type="file";inp.accept="application/json,.json";
-  inp.onchange=()=>{const f=inp.files[0];if(!f)return;const rd=new FileReader();
-    rd.onload=()=>{try{const o=JSON.parse(rd.result);const before=seen.size;
-      (o.seen||[]).forEach(k=>seen.add(k));(o.later||[]).forEach(k=>later.add(k));
-      saveSet(LS.seen,seen);saveSet(LS.later,later);render();
-      alert("복원 완료 — 본 편 "+(seen.size-before)+"개 추가 (기존 기록은 그대로)");
-    }catch(e){alert("파일을 읽을 수 없습니다");}};
-    rd.readAsText(f);};
-  inp.click();
-}
+// 본 기록은 지우는 기능을 두지 않는다.
 function toggleLater(d,btn){const k=keyOf(d);
   if(later.has(k))later.delete(k);else later.add(k);
   saveSet(LS.later,later);
