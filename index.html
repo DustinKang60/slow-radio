@@ -66,8 +66,9 @@ border-radius:7px;padding:6px 0;font-size:12px;cursor:pointer}
 .lab:hover{background:var(--surface);color:var(--text)}
 .lab.on{background:var(--card);color:var(--text);border-left:3px solid var(--accent)}
 .lab .c{color:var(--muted);font-size:12px}
+.legend{font-size:11px;color:var(--muted);padding:4px 10px 8px;display:flex;gap:7px;align-items:center}
+.legend b{font-weight:700}
 /* 새 편이 들어온 나라는 숫자를 밝게 */
-.lab .c.fresh{color:var(--accent2);font-weight:700}
 .tab button.neu.on,.tab button.neu{border-color:var(--accent)}
 .content{flex:1;overflow-y:auto;padding:18px 24px}
 .h{font-size:21px;font-weight:700}.hs{font-size:13px;color:var(--sub);margin-bottom:14px}
@@ -288,26 +289,27 @@ function loadSet(k){try{return new Set(JSON.parse(localStorage.getItem(k)||"[]")
 function saveSet(k,s){try{localStorage.setItem(k,JSON.stringify([...s]));}catch(e){}}
 const seen=loadSet(LS.seen),later=loadSet(LS.later);
 
-/* ── 새로 올라온 편 표시 ────────────────────────────────────────────────
-   처음 설치했을 때 있던 목록을 'baseline(known)'으로 저장한다. 그 뒤 카탈로그에
-   새로 들어온 편(자동 갱신이든 앱이 찾은 것이든)은 baseline 에 없으므로 새 편.
-   ★중요: 앱을 '열었다'는 이유로 baseline 을 키우지 않는다. 그러면 밝은 표시가
-   한 번 열고 나면 사라진다(예전 버그). 새 편은 '재생하기 전까지' 계속 밝게
-   유지하고, 재생해야 baseline 에 들어가 표시가 꺼진다. */
-const LS_KNOWN="gr_known";
-let freshIds=new Set();
-function refreshNew(){
-  const known=loadSet(LS_KNOWN);
-  const ids=DATA.filter(d=>d.y).map(d=>d.y);
-  if(!known.size){                    // 첫 실행: 현재 목록 전부를 baseline 으로
-    ids.forEach(i=>known.add(i));saveSet(LS_KNOWN,known);return;
-  }
-  // baseline 에 없고 아직 재생도 안 한 편 = 새 편 (열어도 소모되지 않음)
-  freshIds=new Set();
-  ids.forEach(i=>{if(!known.has(i)&&!seen.has(i))freshIds.add(i);});
+/* ── 최신 3편 표시 ──────────────────────────────────────────────────────
+   기기의 '지난번에 봤나' 상태에 기대지 않고, 항상 업로드가 가장 최근인 3편을
+   1·2·3위 서로 다른 색으로 사이드바 국가 숫자에 표시한다. 한 편이 여러 나라에
+   있으면(관계형) 그 나라들 모두 그 순위 색을 받는다. */
+const RECENT_COLORS=["#ff3370","#fbbf24","#38bdf8"];  // 1위(핑크)·2위(노랑)·3위(파랑)
+let recentRank={};   // videoId -> 0/1/2
+function computeRecent(){
+  recentRank={};
+  const uniq={};
+  for(const d of DATA) if(d.y&&!(d.y in uniq)) uniq[d.y]=d.s||"";
+  Object.entries(uniq).sort((a,b)=>(a[1]<b[1]?1:a[1]>b[1]?-1:0))
+    .slice(0,RECENT_COLORS.length).forEach(([y],i)=>{recentRank[y]=i;});
 }
-function markKnown(y){const k=loadSet(LS_KNOWN);k.add(y);saveSet(LS_KNOWN,k);}
-function isNew(d){return !!(d.y&&freshIds.has(d.y)&&!seen.has(keyOf(d)));}
+// 한 나라 폴더가 최신 3편 중 하나를 담고 있으면 가장 높은(작은) 순위를 돌려준다.
+function labelRank(bucket,label){
+  let r=-1;
+  for(const d of DATA) if(d.b===bucket&&d.l===label&&d.y in recentRank){
+    if(r<0||recentRank[d.y]<r)r=recentRank[d.y];
+  }
+  return r;
+}
 let sortDesc=localStorage.getItem(LS.sort)!=="asc";   // 기본 최신순
 let hideSeen=localStorage.getItem(LS.hide)==="1";
 let view="normal";                                    // normal | later
@@ -348,12 +350,17 @@ function buildSide(){
   lb.onclick=()=>{view=view==="later"?"normal":"later";curSearch="";document.getElementById("search").value="";render();};
   tab.appendChild(lb);
   side.appendChild(tab);
+  // 색 범례: 최신 3편이 어느 색인지
+  const lg=document.createElement("div");lg.className="legend";
+  lg.innerHTML="최신 "+RECENT_COLORS.map((c,i)=>`<b style="color:${c}">${i+1}</b>`).join(" ");
+  side.appendChild(lg);
   const labs=[...new Set(DATA.filter(d=>d.b===curBucket).map(d=>d.l))];
   labs.sort((a,c)=>(m[curBucket+"|"+c]||0)-(m[curBucket+"|"+a]||0));
   labs.forEach(l=>{const el=document.createElement("div");el.className="lab"+(l===curLabel&&!curSearch&&view==="normal"?" on":"");
     // 새 편이 들어온 나라는 숫자를 밝게(액센트) 표시한다
-    const fresh=DATA.some(d=>isNew(d)&&d.b===curBucket&&d.l===l);
-    el.innerHTML=`<span>${esc(l)}</span><span class="c${fresh?" fresh":""}">${m[curBucket+"|"+l]}</span>`;
+    const rk=labelRank(curBucket,l);
+    const cstyle=rk>=0?` style="color:${RECENT_COLORS[rk]};font-weight:700"`:"";
+    el.innerHTML=`<span>${esc(l)}</span><span class="c"${cstyle}>${m[curBucket+"|"+l]}</span>`;
     el.onclick=()=>{view="normal";curLabel=l;curSearch="";document.getElementById("search").value="";render();};side.appendChild(el);});
 }
 function render(){
@@ -534,8 +541,6 @@ function playItem(d,list,idx,el){
   setMediaSession(d);
   if(!seen.has(curKey)){seen.add(curKey);saveSet(LS.seen,seen);
     if(el){el.classList.add("seen");el.querySelector(".play").textContent="✓";}}
-  // 새 편을 한 번 재생하면 baseline 에 넣어 밝은 표시를 영구히 끈다
-  if(d.y&&freshIds.has(d.y)){freshIds.delete(d.y);markKnown(d.y);buildSide();}
   document.querySelectorAll(".item.playing").forEach(e=>e.classList.remove("playing"));
   if(el)el.classList.add("playing");
   const nowT=document.getElementById("nowT"),nowM=document.getElementById("nowM");
@@ -663,7 +668,7 @@ async function checkNew(force){
     localStorage.setItem(LS_LASTCHK,String(Date.now()));
     // 새 편은 원래 속한 국가/주제 폴더에 그대로 들어간다. 알림은 사이드바
     // 숫자를 밝게 하는 것으로 충분하므로 화면을 가로채지 않는다.
-    if(added.length){saveExtra(extra);DATA=mergeExtra();refreshNew();render();}
+    if(added.length){saveExtra(extra);DATA=mergeExtra();computeRecent();render();}
     return added.length;
   }catch(e){return 0;}
   finally{chkBusy=false;}
@@ -673,10 +678,10 @@ checkNew(false);
 document.addEventListener("visibilitychange",()=>{
   if(document.visibilityState==="visible")checkNew(false);});
 
-// 새 편이 있으면 그 편이 들어 있는 폴더를 첫 화면으로 연다(별도 탭 없이)
-(function openFresh(){
-  refreshNew();
-  const f=DATA.filter(isNew).sort((a,b)=>(a.s<b.s?1:-1))[0];
+// 앱을 열면 가장 최신 편이 들어 있는 나라 폴더를 첫 화면으로 연다.
+(function openLatest(){
+  computeRecent();
+  const f=DATA.find(d=>recentRank[d.y]===0);
   if(f){curBucket=f.b;curLabel=f.l;}
 })();
 render();
