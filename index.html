@@ -289,20 +289,24 @@ function saveSet(k,s){try{localStorage.setItem(k,JSON.stringify([...s]));}catch(
 const seen=loadSet(LS.seen),later=loadSet(LS.later);
 
 /* ── 새로 올라온 편 표시 ────────────────────────────────────────────────
-   "지난번에 앱을 열었을 때 목록에 없던 편"을 새 편으로 본다. 그래야 앱이
-   직접 찾아낸 것이든, 매일 도는 자동 갱신이 카탈로그에 넣어준 것이든
-   똑같이 표시된다. 본 적 있는 편은 제외한다. */
+   처음 설치했을 때 있던 목록을 'baseline(known)'으로 저장한다. 그 뒤 카탈로그에
+   새로 들어온 편(자동 갱신이든 앱이 찾은 것이든)은 baseline 에 없으므로 새 편.
+   ★중요: 앱을 '열었다'는 이유로 baseline 을 키우지 않는다. 그러면 밝은 표시가
+   한 번 열고 나면 사라진다(예전 버그). 새 편은 '재생하기 전까지' 계속 밝게
+   유지하고, 재생해야 baseline 에 들어가 표시가 꺼진다. */
 const LS_KNOWN="gr_known";
 let freshIds=new Set();
 function refreshNew(){
   const known=loadSet(LS_KNOWN);
   const ids=DATA.filter(d=>d.y).map(d=>d.y);
-  if(!known.size){                    // 첫 실행: 전부 아는 것으로 두고 시작
+  if(!known.size){                    // 첫 실행: 현재 목록 전부를 baseline 으로
     ids.forEach(i=>known.add(i));saveSet(LS_KNOWN,known);return;
   }
-  ids.forEach(i=>{if(!known.has(i))freshIds.add(i);known.add(i);});
-  saveSet(LS_KNOWN,known);
+  // baseline 에 없고 아직 재생도 안 한 편 = 새 편 (열어도 소모되지 않음)
+  freshIds=new Set();
+  ids.forEach(i=>{if(!known.has(i)&&!seen.has(i))freshIds.add(i);});
 }
+function markKnown(y){const k=loadSet(LS_KNOWN);k.add(y);saveSet(LS_KNOWN,k);}
 function isNew(d){return !!(d.y&&freshIds.has(d.y)&&!seen.has(keyOf(d)));}
 let sortDesc=localStorage.getItem(LS.sort)!=="asc";   // 기본 최신순
 let hideSeen=localStorage.getItem(LS.hide)==="1";
@@ -530,9 +534,8 @@ function playItem(d,list,idx,el){
   setMediaSession(d);
   if(!seen.has(curKey)){seen.add(curKey);saveSet(LS.seen,seen);
     if(el){el.classList.add("seen");el.querySelector(".play").textContent="✓";}}
-  // 새로 들어온 편을 한 번 재생하면 '새 편' 표시를 뗀다
-  // 새 편을 한 번 재생하면 밝은 표시를 뗀다
-  if(d.y&&freshIds.has(d.y)){freshIds.delete(d.y);buildSide();}
+  // 새 편을 한 번 재생하면 baseline 에 넣어 밝은 표시를 영구히 끈다
+  if(d.y&&freshIds.has(d.y)){freshIds.delete(d.y);markKnown(d.y);buildSide();}
   document.querySelectorAll(".item.playing").forEach(e=>e.classList.remove("playing"));
   if(el)el.classList.add("playing");
   const nowT=document.getElementById("nowT"),nowM=document.getElementById("nowM");
