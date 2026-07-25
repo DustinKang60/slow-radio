@@ -35,7 +35,8 @@ def split_title(t):
     return re.sub(r"\[[^\]]*\]", " ", s), tag
 
 
-def country_of(title):
+def countries_of(title):
+    """관련 국가 리스트. 한 나라가 우세하면 1개, 대등하면 여럿(양쪽 폴더)."""
     body, tag = split_title(title)
     tag_hits = {c: hits(tag, al) for c, al in GAZ.items()}
     scores = {}
@@ -44,13 +45,15 @@ def country_of(title):
         if s:
             scores[c] = s
     if not scores:
-        return None
+        return []
     # 미국이 본문에서만 잡혔고 다른 나라도 있으면 행위자로 보고 제외
     if "미국" in scores and not tag_hits.get("미국") and len(scores) >= 2:
         del scores["미국"]
+    if not scores:
+        return []
     ranked = sorted(scores.items(), key=lambda kv: -kv[1])
-    second = ranked[1][1] if len(ranked) > 1 else 0
-    return ranked[0][0] if (second == 0 or ranked[0][1] >= W["dom"] * second) else None
+    thr = ranked[0][1] / W["dom"]
+    return [c for c, s in ranked if s >= thr][:3]
 
 
 def best_of(title, table):
@@ -70,16 +73,17 @@ def bucket_of(label):
 
 
 def assign(title):
+    """(bucket,label) 리스트. 관계형 대등이면 여러 개."""
     for sub, label in OVER:
         if sub in title:
-            return bucket_of(label), label
-    th, c = best_of(title, THEME), country_of(title)
-    if th and not c: return "주제", th
-    if c:            return "국가", c
-    if th:           return "주제", th
+            return [(bucket_of(label), label)]
+    th, cs = best_of(title, THEME), countries_of(title)
+    if th and not cs: return [("주제", th)]
+    if cs:            return [("국가", c) for c in cs]
+    if th:            return [("주제", th)]
     rg = best_of(title, REGION)
-    if rg:           return "지역", rg
-    return "기타", "기타"
+    if rg:            return [("지역", rg)]
+    return [("기타", "기타")]
 
 
 def main():
@@ -114,11 +118,12 @@ def main():
         for a, b in (("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"), ("&quot;", '"'), ("&#39;", "'")):
             title = title.replace(a, b)
         date = pub.group(1)[:10] if pub else ""
-        b, l = assign(title)
-        data.append({"b": b, "l": l, "d": date, "s": date.replace("-", ""),
-                     "t": title, "y": vid, "k": "yt"})
+        labels = assign(title)   # 관계형이면 여러 폴더 → 폴더당 한 엔트리
+        for b, l in labels:
+            data.append({"b": b, "l": l, "d": date, "s": date.replace("-", ""),
+                         "t": title, "y": vid, "k": "yt"})
         have.add(vid)
-        added.append((date, b, l, title))
+        added.append((date, "+".join(l for _, l in labels), title))
 
     if not added:
         print("새 영상 없음 — 변경 없이 종료.")
@@ -135,9 +140,9 @@ def main():
         sw = sw.replace(mv.group(0), f"globe-radio-v{int(mv.group(1)) + 1}")
         open(SW, "w", encoding="utf-8").write(sw)
 
-    print(f"새 영상 {len(added)}편 추가 (총 {len(data)}편)")
-    for date, b, l, t in added:
-        print(f"  {date}  {b}/{l}  {t[:60]}")
+    print(f"새 영상 {len(added)}편 추가 (총 엔트리 {len(data)}개)")
+    for date, labels, t in added:
+        print(f"  {date}  [{labels}]  {t[:60]}")
     return 0
 
 
